@@ -7,6 +7,7 @@ on:
     branches: [locust-to-k6]
     paths:
       - src/load-generator/**
+  workflow_dispatch: {}
 
 permissions:
   contents: read
