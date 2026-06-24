@@ -1,0 +1,40 @@
+# Builds the custom k6 load-generator image and pushes it to GHCR whenever
+# the load-generator source changes on the locust-to-k6 branch.
+name: Build load-generator image
+
+on:
+  push:
+    branches: [locust-to-k6]
+    paths:
+      - src/load-generator/**
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build and push load-generator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772  # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ce1b5f5a8b4  # v3.10.0
+
+      - name: Build and push
+        uses: docker/build-push-action@14487ce63c7a62a4a324b0bfb37086795e31c6c1  # v6.16.0
+        with:
+          context: .
+          file: src/load-generator/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/opentelemetry-demo:load-generator
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
