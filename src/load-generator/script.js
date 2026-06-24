@@ -33,14 +33,8 @@ export const options = {
                     browser: {
                         type: 'chromium',
                         headless: true,
-                        executablePath: '/usr/bin/chromium',
-                        args: [
-                            '--no-sandbox',
-                            '--disable-dev-shm-usage',
-                            '--disable-gpu',
-                            '--disable-setuid-sandbox',
-                            '--disable-software-rasterizer',
-                        ],
+                        // executablePath and args are set via K6_BROWSER_EXECUTABLE_PATH
+                        // and K6_BROWSER_ARGS env vars — the scenario options field is ignored.
                     },
                 },
             },
@@ -72,16 +66,22 @@ function uuid4() {
     })
 }
 
+// getFlagdValue mirrors Locust's TracingHook: each flag evaluation gets its
+// own OTel span so flag-driven behaviour is visible in traces.
 function getFlagdValue(flagName) {
+    const span = tracer.startSpan('feature_flag.evaluate', { 'feature_flag.key': flagName })
     const res = http.post(
         `http://${FLAGD_HOST}:${FLAGD_OFREP_PORT}/ofrep/v1/evaluate/flags/${flagName}`,
         JSON.stringify({}),
-        { headers: { 'Content-Type': 'application/json' }, tags: { flagd: 'true' } }
+        { headers: otelHeaders(span.traceParent(), { 'Content-Type': 'application/json' }), tags: { flagd: 'true' } }
     )
+    let value = 0
     if (res.status === 200) {
-        return JSON.parse(res.body).value || 0
+        value = JSON.parse(res.body).value || 0
     }
-    return 0
+    span.log(`Feature flag ${flagName} evaluated to ${value}`)
+    span.end()
+    return value
 }
 
 // Merges OTel headers (baggage + traceparent) with any extra headers provided.
@@ -160,9 +160,10 @@ function getAds() {
     const category = randomChoice(categories)
     const span = tracer.startSpan('user_get_ads', { category: String(category) })
     span.log(`User getting ads for category: ${category}`)
+    // When category is null, Locust sends contextKeys=None (Python str(None)).
     const url = category !== null
         ? `${BASE_URL}/api/data/?contextKeys=${category}`
-        : `${BASE_URL}/api/data/`
+        : `${BASE_URL}/api/data/?contextKeys=None`
     http.get(url, { headers: otelHeaders(span.traceParent()) })
     span.end()
 }
