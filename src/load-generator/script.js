@@ -102,6 +102,7 @@ let sessionId = null
 function onStart() {
     sessionId = uuid4()
     const span = tracer.startSpan('user_session_start')
+    span.log(`Starting user session: ${sessionId}`)
     http.get(`${BASE_URL}/`, { headers: otelHeaders(span.traceParent()) })
     span.end()
 }
@@ -110,6 +111,7 @@ function onStart() {
 
 function index() {
     const span = tracer.startSpan('user_index')
+    span.log('User accessing index page')
     http.get(`${BASE_URL}/`, { headers: otelHeaders(span.traceParent()) })
     span.end()
 }
@@ -117,6 +119,7 @@ function index() {
 function browseProduct() {
     const product = randomChoice(products)
     const span = tracer.startSpan('user_browse_product', { 'product.id': product })
+    span.log(`User browsing product: ${product}`)
     http.get(`${BASE_URL}/api/products/${product}`, { headers: otelHeaders(span.traceParent()) })
     span.end()
 }
@@ -124,6 +127,7 @@ function browseProduct() {
 function getRecommendations() {
     const product = randomChoice(products)
     const span = tracer.startSpan('user_get_recommendations', { 'product.id': product })
+    span.log(`User getting recommendations for product: ${product}`)
     http.get(
         `${BASE_URL}/api/recommendations?productIds=${product}`,
         { headers: otelHeaders(span.traceParent()) }
@@ -134,6 +138,7 @@ function getRecommendations() {
 function getProductReviews() {
     const product = randomChoice(products)
     const span = tracer.startSpan('user_get_product_reviews', { 'product.id': product })
+    span.log(`User getting product reviews for product: ${product}`)
     http.get(`${BASE_URL}/api/product-reviews/${product}`, { headers: otelHeaders(span.traceParent()) })
     span.end()
 }
@@ -142,6 +147,7 @@ function askProductAiAssistant() {
     const product = randomChoice(products)
     const question = 'Can you summarize the product reviews?'
     const span = tracer.startSpan('user_ask_product_ai_assistant', { 'product.id': product, question })
+    span.log(`Asking the AI Assistant a question for: ${product} ${question}`)
     http.post(
         `${BASE_URL}/api/product-ask-ai-assistant/${product}`,
         JSON.stringify({ question }),
@@ -153,6 +159,7 @@ function askProductAiAssistant() {
 function getAds() {
     const category = randomChoice(categories)
     const span = tracer.startSpan('user_get_ads', { category: String(category) })
+    span.log(`User getting ads for category: ${category}`)
     const url = category !== null
         ? `${BASE_URL}/api/data/?contextKeys=${category}`
         : `${BASE_URL}/api/data/`
@@ -162,15 +169,24 @@ function getAds() {
 
 function viewCart() {
     const span = tracer.startSpan('user_view_cart')
+    span.log('User viewing cart')
     http.get(`${BASE_URL}/api/cart`, { headers: otelHeaders(span.traceParent()) })
     span.end()
 }
 
-function addToCart() {
-    const user = uuid4()
+// addToCart can be called standalone (weight-2 task) or nested inside a
+// checkout span. When parentTraceParent is provided the span is created as a
+// child of the checkout span, mirroring Locust's add_to_cart nesting.
+function addToCart(user, parentTraceParent) {
+    if (!user) user = uuid4()
     const product = randomChoice(products)
     const quantity = randomChoice([1, 2, 3, 4, 5, 10])
-    const span = tracer.startSpan('user_add_to_cart', { 'user.id': user, 'product.id': product, quantity })
+    const span = tracer.startSpan(
+        'user_add_to_cart',
+        { 'user.id': user, 'product.id': product, quantity },
+        parentTraceParent
+    )
+    span.log(`User ${user} adding ${quantity} of product ${product} to cart`)
     const h = otelHeaders(span.traceParent())
     http.get(`${BASE_URL}/api/products/${product}`, { headers: h })
     http.post(
@@ -181,29 +197,19 @@ function addToCart() {
     span.end()
 }
 
-// checkout and checkoutMulti inline the cart-addition logic so all HTTP calls
-// share the same parent span, matching how Locust nests add_to_cart inside
-// the checkout context.
-
 function checkout() {
     const user = uuid4()
     const span = tracer.startSpan('user_checkout_single', { 'user.id': user })
-    const h = otelHeaders(span.traceParent())
-    const json = { 'Content-Type': 'application/json' }
+    span.log(`Starting checkout for user ${user}`)
 
-    const product = randomChoice(products)
-    const quantity = randomChoice([1, 2, 3, 4, 5, 10])
-    http.get(`${BASE_URL}/api/products/${product}`, { headers: h })
-    http.post(
-        `${BASE_URL}/api/cart`,
-        JSON.stringify({ item: { productId: product, quantity }, userId: user }),
-        { headers: otelHeaders(span.traceParent(), json) }
-    )
+    addToCart(user, span.traceParent())
+
     http.post(
         `${BASE_URL}/api/checkout`,
         JSON.stringify(Object.assign({}, randomChoice(people), { userId: user })),
-        { headers: otelHeaders(span.traceParent(), json) }
+        { headers: otelHeaders(span.traceParent(), { 'Content-Type': 'application/json' }) }
     )
+    span.log(`Checkout completed for user ${user}`)
     span.end()
 }
 
@@ -211,24 +217,18 @@ function checkoutMulti() {
     const user = uuid4()
     const itemCount = randomChoice([2, 3, 4])
     const span = tracer.startSpan('user_checkout_multi', { 'user.id': user, 'item.count': itemCount })
-    const h = otelHeaders(span.traceParent())
-    const json = { 'Content-Type': 'application/json' }
+    span.log(`Starting multi-item checkout for user ${user}, ${itemCount} items`)
 
     for (let i = 0; i < itemCount; i++) {
-        const product = randomChoice(products)
-        const quantity = randomChoice([1, 2, 3, 4, 5, 10])
-        http.get(`${BASE_URL}/api/products/${product}`, { headers: h })
-        http.post(
-            `${BASE_URL}/api/cart`,
-            JSON.stringify({ item: { productId: product, quantity }, userId: user }),
-            { headers: otelHeaders(span.traceParent(), json) }
-        )
+        addToCart(user, span.traceParent())
     }
+
     http.post(
         `${BASE_URL}/api/checkout`,
         JSON.stringify(Object.assign({}, randomChoice(people), { userId: user })),
-        { headers: otelHeaders(span.traceParent(), json) }
+        { headers: otelHeaders(span.traceParent(), { 'Content-Type': 'application/json' }) }
     )
+    span.log(`Multi-item checkout completed for user ${user}`)
     span.end()
 }
 
@@ -237,6 +237,7 @@ function floodHome() {
     if (floodCount <= 0) return
 
     const span = tracer.startSpan('user_flood_home', { 'flood.count': floodCount })
+    span.log(`User flooding homepage ${floodCount} times`)
     const h = otelHeaders(span.traceParent())
     for (let i = 0; i < floodCount; i++) {
         http.get(`${BASE_URL}/`, { headers: h })
@@ -305,14 +306,24 @@ async function addProductToCartBrowser(page) {
 export async function browserScenario() {
     const page = await browser.newPage()
     try {
-        // Mirror the Locust add_baggage_header route interceptor
-        await page.setExtraHTTPHeaders({ baggage: 'synthetic_request=true' })
-
-        // Two tasks with equal weight, matching Locust's default @task weight of 1
         if (Math.random() < 0.5) {
+            const span = tracer.startSpan('browser_change_currency')
+            span.log('Currency changed to CHF')
+            await page.setExtraHTTPHeaders({
+                baggage: 'synthetic_request=true',
+                traceparent: span.traceParent(),
+            })
             await changeCurrency(page)
+            span.end()
         } else {
+            const span = tracer.startSpan('browser_add_to_cart')
+            span.log('Product added to cart successfully')
+            await page.setExtraHTTPHeaders({
+                baggage: 'synthetic_request=true',
+                traceparent: span.traceParent(),
+            })
             await addProductToCartBrowser(page)
+            span.end()
         }
     } catch (e) {
         console.error(`browser task error: ${e}`)
