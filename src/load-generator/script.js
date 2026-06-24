@@ -3,7 +3,7 @@
 
 import http from 'k6/http'
 import { sleep } from 'k6'
-import { browser } from 'k6/experimental/browser'
+import { browser } from 'k6/browser'
 import { Tracer } from 'k6/x/otel'
 
 const BASE_URL = __ENV.LOCUST_HOST || 'http://frontend-proxy:8080'
