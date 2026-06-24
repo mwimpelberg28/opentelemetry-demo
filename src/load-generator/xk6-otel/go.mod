@@ -1,6 +1,6 @@
 module github.com/open-telemetry/opentelemetry-demo/src/load-generator/xk6-otel
 
-go 1.24
+go 1.25
 
 require (
 	github.com/grafana/sobek v0.0.0-20260429085637-a66d4790012b
