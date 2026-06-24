@@ -29,7 +29,13 @@ export const options = {
                     headless: true,
                     // --no-sandbox and --disable-dev-shm-usage are required when
                     // running Chromium inside a Docker container as root.
-                    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+                    args: [
+                        '--no-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--disable-setuid-sandbox',
+                        '--disable-software-rasterizer',
+                    ],
                 },
             },
         },
