@@ -223,7 +223,7 @@ func makeTraceParent(span trace.Span) func() string {
 func makeSpanLog(span trace.Span) func(sobek.FunctionCall) sobek.Value {
 	return func(fc sobek.FunctionCall) sobek.Value {
 		if globalLogger == nil {
-			return sobek.Undefined()
+			return nil
 		}
 		msg := fc.Argument(0).String()
 		sc := span.SpanContext()
@@ -237,7 +237,7 @@ func makeSpanLog(span trace.Span) func(sobek.FunctionCall) sobek.Value {
 		r.SetTraceFlags(sc.TraceFlags())
 
 		globalLogger.Emit(context.Background(), r)
-		return sobek.Undefined()
+		return nil
 	}
 }
 
