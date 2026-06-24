@@ -232,11 +232,10 @@ func makeSpanLog(span trace.Span) func(sobek.FunctionCall) sobek.Value {
 		r.SetTimestamp(time.Now())
 		r.SetSeverity(otellog.SeverityInfo)
 		r.SetBody(otellog.StringValue(msg))
-		r.SetTraceID(sc.TraceID())
-		r.SetSpanID(sc.SpanID())
-		r.SetTraceFlags(sc.TraceFlags())
 
-		globalLogger.Emit(context.Background(), r)
+		// Inject span context so the SDK attaches trace/span IDs to the record.
+		ctx := trace.ContextWithSpanContext(context.Background(), sc)
+		globalLogger.Emit(ctx, r)
 		return nil
 	}
 }
