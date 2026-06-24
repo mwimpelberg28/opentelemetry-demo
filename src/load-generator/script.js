@@ -10,6 +10,11 @@ const BASE_URL = __ENV.LOCUST_HOST || 'http://frontend-proxy:8080'
 const FLAGD_HOST = __ENV.FLAGD_HOST || 'flagd'
 const FLAGD_OFREP_PORT = __ENV.FLAGD_OFREP_PORT || '8016'
 
+// Browser scenario is opt-in via K6_BROWSER_ENABLED=true.
+// Default-off because Chromium requires a relaxed pod security context that
+// most Kubernetes clusters do not grant by default.
+const browserEnabled = (__ENV.K6_BROWSER_ENABLED || '').toLowerCase() === 'true'
+
 export const options = {
     scenarios: {
         load: {
@@ -18,27 +23,28 @@ export const options = {
             vus: parseInt(__ENV.LOCUST_USERS || '10'),
             duration: __ENV.K6_DURATION || '999h',
         },
-        browser: {
-            executor: 'constant-vus',
-            exec: 'browserScenario',
-            vus: 1,
-            duration: __ENV.K6_DURATION || '999h',
-            options: {
-                browser: {
-                    type: 'chromium',
-                    headless: true,
-                    // --no-sandbox and --disable-dev-shm-usage are required when
-                    // running Chromium inside a Docker container as root.
-                    args: [
-                        '--no-sandbox',
-                        '--disable-dev-shm-usage',
-                        '--disable-gpu',
-                        '--disable-setuid-sandbox',
-                        '--disable-software-rasterizer',
-                    ],
+        ...(browserEnabled ? {
+            browser: {
+                executor: 'constant-vus',
+                exec: 'browserScenario',
+                vus: 1,
+                duration: __ENV.K6_DURATION || '999h',
+                options: {
+                    browser: {
+                        type: 'chromium',
+                        headless: true,
+                        executablePath: '/usr/bin/chromium',
+                        args: [
+                            '--no-sandbox',
+                            '--disable-dev-shm-usage',
+                            '--disable-gpu',
+                            '--disable-setuid-sandbox',
+                            '--disable-software-rasterizer',
+                        ],
+                    },
                 },
             },
-        },
+        } : {}),
     },
 }
 
