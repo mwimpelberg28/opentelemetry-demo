@@ -14,10 +14,6 @@ WORKDIR /build
 # local module via the --with flag rather than fetched from a remote registry.
 COPY ./src/load-generator/xk6-otel ./xk6-otel
 
-# Pre-validate: build the extension in isolation so Go errors are visible.
-# xk6 swallows Go's stderr; this step surfaces any compile errors first.
-RUN cd xk6-otel && GOFLAGS=-mod=mod go build ./...
-
 RUN xk6 build v2.0.0 \
     --with github.com/open-telemetry/opentelemetry-demo/src/load-generator/xk6-otel=./xk6-otel \
     --output ./k6
